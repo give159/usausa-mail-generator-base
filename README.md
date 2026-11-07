@@ -51,5 +51,5 @@
 
 ご不明な点やご質問がございましたら、以下よりお気軽にお問い合わせください。
 * **📩 メール:** yukinote1026@gmail.com
-* **🌐 note:** https://note.com
-* **💼 LinkedIn:** ://linkedin.com
+* **🌐 note:** https://note.com/yukikkoaimanabi
+* **💼 LinkedIn:** :www.linkedin.com/in/ishiguro-yukiko-0b3194387
