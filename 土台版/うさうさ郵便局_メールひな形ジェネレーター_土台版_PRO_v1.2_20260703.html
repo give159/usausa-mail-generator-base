@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<!-- =========================================================
+  うさうさ郵便局 メールひな形ジェネレーター 土台版 PRO v1.2（2026-07-03）
+  （書籍『メールひな形ジェネレーター PRO v1.19.0』の“最初の土台”）
+  --- CHANGELOG ---
+   v1.2 (2026-07-03): 不具合修正
+     - 締め切りが「依頼」以外の用途で本文に反映されない問題を修正
+       （報告・連絡・お礼・お詫びでも「■ 締め切り」として表示されるようにした）
+   v1.1 (2026-07-03): 本編と一致させる修正
+     - completeDefaults：署名の自動補完をやめた（本の安全方針＝署名は補完しない）
+     - EXTERNAL：本の基準リスト（社外のご担当者／ベンダーご担当者／研修先企業ご担当者）に統一
+     - applyDivStyle を追加し、gen() を「配列join → applyDivStyle → esc → preview」に整えた
+   v1.0 (初版): 土台版
+  - 単一HTML・オフライン・外部通信なし・素のJavaScript(ES5)
+  - この1ファイルを開くだけで動きます（サーバー不要）
+  - 本編PRO v1.19.0 へ育てていくための出発点です
+  © うさうさ研修工房 YUKIKO / 面白きこともなき世を面白く
+========================================================= -->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 安全のための宣言：外部からの読み込みを制限します -->
+<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline'; object-src 'none'; base-uri 'none';">
+<title>うさうさ郵便局 メールひな形ジェネレーター 土台版 PRO v1.2</title>
+<style>
+  /* ===== 配色（ここを変えると全体の色が変わります：本編R7と同じ考え方） ===== */
+  :root{
+    --cream:#FBF3E6; --paper:#FFFBF3; --post:#D65A4E; --post-deep:#B84A3F;
+    --gold:#E0A63C; --ink:#4A382C; --leaf:#6FA765; --sky:#7FA9C9; --line:#E7DBC7;
+  }
+  *{ box-sizing:border-box; }
+  [hidden]{ display:none !important; }
+  body{ margin:0; background:var(--cream); color:var(--ink);
+        font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",Meiryo,sans-serif; line-height:1.7; }
+  .wrap{ max-width:880px; margin:0 auto; padding:16px; }
+
+  /* ヘッダー（郵便局の看板） */
+  header{ display:flex; align-items:center; gap:12px; padding:14px 16px;
+          background:var(--paper); border:2px solid var(--post); border-radius:14px; }
+  .mark{ width:42px; height:42px; border-radius:50%; background:var(--post); color:#fff;
+         display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:22px; }
+  header h1{ font-size:18px; margin:0; }
+  header .sub{ font-size:12px; color:var(--post); }
+  .verpill{ margin-left:auto; font-size:12px; background:var(--gold); color:#fff;
+            padding:3px 10px; border-radius:999px; white-space:nowrap; }
+
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  @media (max-width:720px){ .grid{ grid-template-columns:1fr; } }
+
+  .card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .card h2{ font-size:15px; margin:0 0 10px; color:var(--post-deep); }
+  label{ display:block; font-size:13px; margin:10px 0 4px; }
+  select, input[type="text"], input[type="date"], textarea{
+    width:100%; padding:9px 11px; font-size:14px; color:var(--ink);
+    border:1px solid var(--line); border-radius:9px; background:#fff; font-family:inherit; }
+  textarea{ resize:vertical; }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .chip{ font-size:12px; padding:6px 10px; border:1px solid var(--line); border-radius:999px;
+         background:#fff; color:var(--ink); cursor:pointer; }
+  .chip:hover{ background:var(--cream); }
+
+  .btns{ display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  .btn{ padding:10px 16px; font-size:14px; border-radius:10px; cursor:pointer; border:1px solid var(--post); background:#fff; color:var(--post); }
+  .btn.primary{ background:var(--post); color:#fff; font-weight:bold; }
+  .btn:hover{ filter:brightness(0.98); }
+
+  /* プレビュー（できあがり） */
+  .subj{ font-weight:bold; color:var(--post-deep); margin-bottom:8px; }
+  .preview{ white-space:pre-wrap; word-break:break-word; background:#fff;
+            border:1px dashed var(--line); border-radius:10px; padding:12px; min-height:200px; font-size:14px; }
+
+  .toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+          background:var(--ink); color:#fff; padding:9px 16px; border-radius:999px; font-size:13px; }
+
+  footer{ text-align:center; color:var(--post-deep); font-size:12px; margin:20px 0 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="mark">〒</div>
+    <div>
+      <h1>うさうさ郵便局 メールひな形ジェネレーター</h1>
+      <div class="sub">〒 創業うさ年・クラシックメルヘン郵便局 ── 件名から署名まで、まとめて用意。</div>
+    </div>
+    <div class="verpill">土台版 PRO v1.2</div>
+  </header>
+
+  <div class="grid">
+
+    <!-- ===== 左：入力エリア（ここに触ると、右のプレビューが即つくり変わります） ===== -->
+    <!-- id="tabCompose" にまとめておくと、ライブプレビューの配線が1つで済みます -->
+    <section class="card" id="tabCompose">
+      <h2>① 入力する</h2>
+
+      <label for="pattern">用途（メールの種類）</label>
+      <select id="pattern">
+        <option value="houkoku">ご報告</option>
+        <option value="renraku">ご連絡</option>
+        <option value="irai">お願い（依頼）</option>
+        <option value="orei">お礼</option>
+        <option value="owabi">お詫び</option>
+      </select>
+
+      <label for="role">あて先（役職名で選びます）</label>
+      <select id="role">
+        <option value="サブ講師">サブ講師</option>
+        <option value="メイン講師">メイン講師</option>
+        <option value="上長">上長</option>
+        <option value="社外のご担当者">社外のご担当者（社外）</option>
+        <option value="ベンダーご担当者">ベンダーご担当者（社外）</option>
+        <option value="研修先企業ご担当者">研修先企業ご担当者（社外）</option>
+      </select>
+
+      <label for="tone">トーン（ていねいさ）</label>
+      <select id="tone">
+        <option value="soft">やわらかめ</option>
+        <option value="formal">ふつう（ていねい）</option>
+        <option value="keirei">最上級の敬語</option>
+      </select>
+
+      <label for="divStyle">区切りスタイル（見出しの飾り）</label>
+      <select id="divStyle">
+        <option value="■">■ 事実</option>
+        <option value="kakko">【 事実 】</option>
+        <option value="yama">＜ 事実 ＞</option>
+      </select>
+
+      <label for="kw">件名キーワード</label>
+      <input type="text" id="kw" placeholder="例）研修進捗">
+
+      <label for="points">要件（1行に1つずつ）</label>
+      <textarea id="points" rows="4" placeholder="例）&#10;本日の到達度は80%&#10;明日は復習から開始"></textarea>
+
+      <label for="deadline">締め切り</label>
+      <input type="date" id="deadline">
+      <div class="row" style="margin-top:6px;">
+        <span class="chip" onclick="quickDl('today')">今日</span>
+        <span class="chip" onclick="quickDl('tomorrow')">明日</span>
+        <span class="chip" onclick="quickDl('d3')">+3日</span>
+        <span class="chip" onclick="quickDl('mon')">来週月曜</span>
+      </div>
+
+      <label for="sign">署名（次回のために自動で覚えます）</label>
+      <textarea id="sign" rows="3" placeholder="所属・お名前など"></textarea>
+
+      <div class="btns">
+        <button class="btn primary" onclick="createTemplate()">ひな形をつくる</button>
+        <button class="btn" onclick="copyAll()">全文コピー</button>
+      </div>
+    </section>
+
+    <!-- ===== 右：プレビュー（できあがり） ===== -->
+    <section class="card">
+      <h2>② できあがり（そのままメールに貼れます）</h2>
+      <div class="subj" id="subjLine">件名：</div>
+      <div class="preview" id="preview"></div>
+    </section>
+
+  </div>
+
+  <footer>
+    うさうさ研修工房 YUKIKO ／ 土台版 PRO v1.2（2026-07-03） ／ 面白きこともなき世を面白く。
+  </footer>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* =========================================================
+   うさうさ郵便局 メールひな形ジェネレーター 土台版 v1.0
+   素のJavaScript(ES5)。むずかしい書き方は使っていません。
+   本の解説（gen / esc / ライブプレビュー / 締切計算 / 保存）と
+   同じ考え方で作っています。
+========================================================= */
+
+/* この土台のバージョン（本編は PRO v1.19.0） */
+var APP_VERSION = 'v1.2（土台版 PRO・2026-07-03）';
+
+/* 署名を覚えておく保存場所の名前（本編と同じ流儀 usausa_post_*） */
+var LS_SIGN = 'usausa_post_sign';
+
+/* ---- 小さな道具（ヘルパ） ---- */
+
+/* e()：出力を安全にする。< > & を無害化してから画面に出します（本の esc と同じ役割） */
+function e(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+/* 入力欄の値を取り出す */
+function v(id){ var el = document.getElementById(id); return el ? el.value : ''; }
+function byId(id){ return document.getElementById(id); }
+
+/* 社外あて先の一覧（ここに足すと社外あつかいになります＝本編R10と同じ考え方） */
+var EXTERNAL = ['社外のご担当者', 'ベンダーご担当者', '研修先企業ご担当者'];
+function isExternal(role){
+  for (var i = 0; i < EXTERNAL.length; i++){ if (EXTERNAL[i] === role) return true; }
+  return false;
+}
+
+/* 要件の各行を「・」つきの箇条書きにそろえる */
+function bullets(lines){
+  if (!lines.length) return '・（ここに要点が入ります）';
+  var out = [];
+  for (var i = 0; i < lines.length; i++){ out.push('・' + lines[i]); }
+  return out.join('\n');
+}
+
+/* ---- 件名：用途ごとに切り替え（用途を増やすときは、ここに1行足します） ---- */
+function subject(pattern, kw){
+  var k = kw || '〔件名キーワード〕';
+  switch (pattern){
+    case 'houkoku': return '【ご報告】' + k;
+    case 'renraku': return '【ご連絡】' + k;
+    case 'irai':    return '【お願い】' + k + 'のご対応について';
+    case 'orei':    return '【お礼】' + k + 'の件';
+    case 'owabi':   return '【お詫び】' + k + 'の件';
+  }
+  return '【ご連絡】' + k;
+}
+
+/* ---- 挨拶：社内／社外・トーンで書き出しを変える ---- */
+function greeting(role, tone){
+  var atena = role + ' 様';
+  var hi;
+  if (isExternal(role)){
+    hi = 'いつもお世話になっております。';
+  } else {
+    hi = (tone === 'soft') ? 'おつかれさまです。' : 'お世話になっております。';
+  }
+  return atena + '\n\n' + hi;
+}
+
+/* ---- 本文：用途ごとの型（用途を増やすときは、ここにも1つ足します） ---- */
+function body(pattern, points, deadline){
+  var dl  = deadline || '〔期限を入力〕';
+  var pts = bullets(points);
+  switch (pattern){
+    case 'houkoku':
+      return '標記の件、下記のとおりご報告いたします。\n\n'
+           + '■ 事実（起きたこと・数字）\n' + pts + '\n\n'
+           + '■ 次のアクション\n・〔次にやること／ご判断いただきたいこと〕';
+    case 'renraku':
+      return '下記のとおりご連絡いたします。\n\n■ 内容\n' + pts;
+    case 'irai':
+      return '恐れ入りますが、下記につきご対応をお願いできますでしょうか。\n\n'
+           + '■ お願いしたいこと\n' + pts + '\n\n■ 期限\n・' + dl;
+    case 'orei':
+      return 'このたびは、誠にありがとうございました。\n\n■ お礼\n' + pts;
+    case 'owabi':
+      return 'このたびはご迷惑をおかけし、申し訳ございませんでした。\n\n'
+           + '■ 経緯\n' + pts + '\n\n■ 今後の対応\n・〔再発防止など〕';
+  }
+  return '■ 内容\n' + pts;
+}
+
+/* ---- 結び：トーンで切り替え ---- */
+function closing(tone){
+  if (tone === 'keirei') return '何卒よろしくお願い申し上げます。';
+  if (tone === 'formal') return 'よろしくお願いいたします。';
+  return 'よろしくお願いします。'; /* soft */
+}
+
+/* ---- 区切りスタイル：見出し「■ …」の飾りを設定に合わせて置き換える（本の applyDivStyle と同じ） ---- */
+function applyDivStyle(mail){
+  var st = byId('divStyle') ? byId('divStyle').value : '■';
+  if (st === '■') return mail;
+  return mail.replace(/^■ (.+)$/gm, function(_, t){
+    if (st === 'kakko') return '【' + t + '】';
+    if (st === 'yama')  return '＜' + t + '＞';
+    return st + ' ' + t;
+  });
+}
+
+/* ---- 締め切りの計算（元の日付を壊さないのがコツ＝本の addDays と同じ） ---- */
+function addDays(base, n){
+  var d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  d.setDate(d.getDate() + Number(n || 0));
+  return d;
+}
+/* 次の指定曜日（target: 0=日 … 6=土） */
+function nextWeekday(base, target){
+  var d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  var add = (target - d.getDay() + 7) % 7;
+  if (add === 0) add = 7;
+  d.setDate(d.getDate() + add);
+  return d;
+}
+/* 日付を YYYY-MM-DD の文字にする */
+function fmtDate(d){
+  function z(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+}
+/* ワンタッチ締切 */
+function quickDl(kind){
+  var now = new Date(), d;
+  if (kind === 'today')      d = now;
+  else if (kind === 'tomorrow') d = addDays(now, 1);
+  else if (kind === 'd3')       d = addDays(now, 3);
+  else if (kind === 'mon')      d = nextWeekday(now, 1);
+  else d = now;
+  byId('deadline').value = fmtDate(d);
+  refreshPreview();
+}
+
+/* ---- 生成の中心：gen()（本の gen と同じ流れ） ----
+   入力を読む → 挨拶＋本文＋結び＋署名を組み立てる
+   → lastMail に入れる → 安全にして（e）画面に出す → 署名を保存 */
+var lastMail = null;
+function gen(){
+  var pattern  = v('pattern');
+  var role     = v('role');
+  var tone     = byId('tone').value;
+  var kw       = v('kw');
+  var deadline = v('deadline');
+
+  /* 要件を行ごとに分けて、空行を取り除く */
+  var raw = v('points').split('\n');
+  var points = [];
+  for (var i = 0; i < raw.length; i++){
+    var t = String(raw[i]).replace(/\s+$/, '');
+    if (t) points.push(t);
+  }
+
+  var subj = subject(pattern, kw);
+  /* 本文を作る。締め切りが入っていれば、どの用途でも必ず本文に反映する。
+     （「依頼」は本文内に「■ 期限」を持つので、二重表示を避ける） */
+  var bodyText = body(pattern, points, deadline);
+  if (deadline && pattern !== 'irai') {
+    bodyText = bodyText + '\n\n■ 締め切り\n・' + deadline;
+  }
+  /* 本の gen と同じ骨組み：配列で連結 → applyDivStyle → esc → preview */
+  var mail = [ greeting(role, tone), '', bodyText, '', closing(tone), '', v('sign') ].join('\n');
+  mail = applyDivStyle(mail);
+
+  lastMail = { subj: subj, mail: mail };
+  byId('subjLine').textContent = '件名：' + subj;
+  byId('preview').innerHTML = e(mail);      /* ← 出力は必ず e() を通す（安全） */
+
+  try { localStorage.setItem(LS_SIGN, v('sign')); } catch (err) {}
+}
+
+/* ---- 空欄を安全に補う→生成（危険な項目は補わない：本の completeDefaults と同じ方針） ---- */
+function completeDefaults(){
+  function setIfEmpty(id, val){
+    var el = byId(id);
+    if (el && !String(el.value).replace(/^\s+|\s+$/g, '')) el.value = val;
+  }
+  setIfEmpty('divStyle', '■');   /* 害のない既定だけ補う */
+  /* ※締切・件名・要件・署名は自動で埋めません（本編と同じ安全方針：
+     ダミーの締切や署名は、誤送信・虚偽記載のもとになるため） */
+}
+function createTemplate(){ completeDefaults(); gen(); }
+
+/* ---- コピー（うまくいかない環境でも動くように代替も用意） ---- */
+function copyAll(){
+  if (!lastMail) gen();
+  var text = '件名：' + lastMail.subj + '\n\n' + lastMail.mail;
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(
+      function(){ toast('コピーしました'); },
+      function(){ fallbackCopy(text); }
+    );
+  } else {
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text){
+  var ta = document.createElement('textarea');
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast('コピーしました'); }
+  catch (err) { toast('コピーできませんでした'); }
+  document.body.removeChild(ta);
+}
+function toast(msg){
+  var t = byId('toast'); t.textContent = msg; t.hidden = false;
+  setTimeout(function(){ t.hidden = true; }, 1500);
+}
+
+/* ---- ライブプレビュー：押す前から反映（本の bindLivePreview と同じ） ----
+   #tabCompose に1つだけリスナーを付ければ、中の入力欄すべてに効きます */
+var _timer = null;
+function bindLivePreview(){
+  var ct = byId('tabCompose');
+  if (!ct) return;
+  ct.addEventListener('input', livePreview);
+  ct.addEventListener('change', livePreview);
+}
+function livePreview(){
+  if (_timer) clearTimeout(_timer);
+  _timer = setTimeout(refreshPreview, 100);   /* 連打を少しだけ間引く */
+}
+function refreshPreview(){
+  try { gen(); } catch (err) {}
+}
+
+/* ---- 起動：署名を思い出す → 配線 → 一度つくる ---- */
+function init(){
+  try { var s = localStorage.getItem(LS_SIGN); if (s) byId('sign').value = s; } catch (err) {}
+  bindLivePreview();
+  gen();
+}
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
